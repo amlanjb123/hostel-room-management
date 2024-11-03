@@ -1,25 +1,22 @@
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
-const connectDB = require('./utils/database');
+const { connectDB, isConnected, closeConnection } = require('./utils/database');
 const studentRoutes = require('./routes/studentRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const authRoutes = require('./routes/authRoutes');
-const errorHandler = require('./middlewares/errorHandler'); // Import the error handler
+const roomRoutes = require('./routes/roomRoutes');
+const errorHandler = require('./middlewares/errorHandler');
 const config = require('./config/config');
 
 const app = express();
 
-// Connect to the database
-connectDB();
-
 // Middleware
 app.use(express.json());
 app.use(cors({
-  origin: 'http://localhost:3000', // Adjust to the frontend URL
+  origin: 'http://localhost:3000',
   credentials: true
 }));
-
 
 // Serve static files from the "frontend" directory
 app.use(express.static(path.join(__dirname, 'frontend')));
@@ -28,8 +25,9 @@ app.use(express.static(path.join(__dirname, 'frontend')));
 app.use('/students', studentRoutes);
 app.use('/admin', adminRoutes);
 app.use('/auth', authRoutes);
+app.use('/api/rooms', roomRoutes);
 
-// Example API route (adjust based on your backend logic)
+// Example API route
 app.get('/api/example', (req, res) => {
   res.json({ message: "API response here" });
 });
@@ -39,14 +37,37 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'frontend', 'index.html'));
 });
 
-// Error handling middleware (use at the end of all routes)
+// Error handling middleware
 app.use(errorHandler);
 
-// Define port and start the server
-const PORT = config.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-const errorHandler = require('./middlewares/errorHandler');
+// Async function to start the server
+const startServer = async () => {
+  try {
+    // Connect to the database
+    await connectDB();
+    
+    if (isConnected()) {
+      console.log('Database connection verified');
+    }
 
-app.use(errorHandler);
+    // Define port and start the server
+    const PORT = config.PORT || 5000;
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+
+    // Handle graceful shutdown
+    process.on('SIGINT', async () => {
+      console.log('SIGINT received. Shutting down gracefully...');
+      await closeConnection();
+      process.exit(0);
+    });
+
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+// Start the server
+startServer();
